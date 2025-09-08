@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宿舍轮值系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .current-date {
+            color: #7f8c8d;
+            font-size: 1.1em;
+        }
+
+        .duty-section {
+            margin-bottom: 30px;
+        }
+
+        .duty-pair {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .duty-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #e74c3c;
+            margin: 0 10px;
+        }
+
+        .duty-tasks {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .duty-tasks h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .task-list {
+            list-style: none;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .status-section {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+            margin-bottom: 20px;
+        }
+
+        .status-section h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .file-section {
+            margin-top: 30px;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 8px;
+        }
+
+
+        .btn {
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 5px 0;
+        }
+
+        .btn:hover {
+            background: #2980b9;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 15px;
+            }
+            
+            .duty-number {
+                font-size: 1.5em;
+            }
+            
+            h1 {
+                font-size: 1.5em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .duty-pair {
+                padding: 15px;
+            }
+            
+            .btn {
+                padding: 8px 16px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>212宿舍轮值</h1>
+            <div class="current-date" id="currentDate"></div>
+        </header>
+
+        <div class="duty-section">
+            <h2>今日值日生</h2>
+            <div class="duty-pair" id="dutyPair">
+                <span class="duty-number" id="dutyNumber1">1</span>
+                和
+                <span class="duty-number" id="dutyNumber2">2</span>
+                号
+            </div>
+            
+            <div class="duty-tasks">
+                <h3>值日职务</h3>
+                <ul class="task-list">
+                    <li>🗑️ 中午倒垃圾</li>
+                    <li>🗑️ 晚上倒垃圾</li>
+                    <li>🧹 早上、中午或晚上选一个时间扫地和拖地</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="status-section" id="statusSection">
+            <h3>状态信息</h3>
+            <p id="statusText">正在加载状态信息...</p>
+        </div>
+
+    </div>
+
+    <script>
+        // 初始化数据
+        let dutyState = {
+            lastDutyDate: null,
+            lastDutyGroup: 1, // 1: 1-2, 2: 3-4, 3: 5-6
+            leaves: [],
+            holidays: []
+        };
+
+        // 床架配对
+        const bedPairs = [
+            { numbers: [1, 2], name: "1号和2号" },
+            { numbers: [3, 4], name: "3号和4号" },
+            { numbers: [5, 6], name: "5号和6号" }
+        ];
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCurrentDate();
+            loadStoredData();
+            loadDataFileAuto();
+            calculateDuty();
+            updateDisplay();
+        });
+
+        // 更新当前日期显示
+        function updateCurrentDate() {
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('zh-CN', options);
+        }
+
+        // 从localStorage加载存储的数据
+        function loadStoredData() {
+            const stored = localStorage.getItem('dutyState');
+            if (stored) {
+                dutyState = JSON.parse(stored);
+            } else {
+                // 默认设置今天为起始日期
+                dutyState.lastDutyDate = new Date().toISOString().split('T')[0];
+                saveStoredData();
+            }
+        }
+
+        // 保存数据到localStorage
+        function saveStoredData() {
+            localStorage.setItem('dutyState', JSON.stringify(dutyState));
+        }
+
+        // 计算当前应该值班的组别
+        function calculateDuty() {
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 如果今天已经有值班记录，直接返回
+            if (dutyState.lastDutyDate === today) {
+                return;
+            }
+
+            // 检查是否需要跳过今天（假日或请假）
+            if (shouldSkipDuty(today)) {
+                return;
+            }
+
+            // 计算需要轮换的天数
+            const lastDate = new Date(dutyState.lastDutyDate);
+            const currentDate = new Date(today);
+            const diffTime = currentDate - lastDate;
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays > 0) {
+                // 每天轮换一组
+                for (let i = 0; i < diffDays; i++) {
+                    dutyState.lastDutyGroup = (dutyState.lastDutyGroup % 3) + 1;
+                }
+                dutyState.lastDutyDate = today;
+                saveStoredData();
+            }
+        }
+
+        // 检查今天是否需要跳过值班
+        function shouldSkipDuty(today) {
+            // 检查假日
+            for (const holiday of dutyState.holidays) {
+                const startDate = new Date(holiday.startDate);
+                const endDate = new Date(holiday.endDate);
+                const todayDate = new Date(today);
+                
+                if (todayDate >= startDate && todayDate <= endDate) {
+                    return true;
+                }
+            }
+
+            // 检查请假
+            for (const leave of dutyState.leaves) {
+                const startDate = new Date(leave.startDate);
+                const endDate = new Date(leave.endDate);
+                const todayDate = new Date(today);
+                
+                if (todayDate >= startDate && todayDate <= endDate) {
+                    // 检查请假人员是否在当前值班组
+                    const currentGroup = bedPairs[dutyState.lastDutyGroup - 1];
+                    if (currentGroup.numbers.includes(leave.person)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // 更新界面显示
+        function updateDisplay() {
+            const currentGroup = bedPairs[dutyState.lastDutyGroup - 1];
+            document.getElementById('dutyNumber1').textContent = currentGroup.numbers[0];
+            document.getElementById('dutyNumber2').textContent = currentGroup.numbers[1];
+
+            // 更新状态信息
+            const statusElement = document.getElementById('statusText');
+            let statusMessage = "今日正常值班";
+
+            // 检查是否有请假或假日
+            const today = new Date().toISOString().split('T')[0];
+            const skipDuty = shouldSkipDuty(today);
+
+            if (skipDuty) {
+                statusMessage = "⚠️ 今日暂停值班（假日或请假）";
+                
+                // 添加具体原因
+                for (const holiday of dutyState.holidays) {
+                    const startDate = new Date(holiday.startDate);
+                    const endDate = new Date(holiday.endDate);
+                    const todayDate = new Date(today);
+                    
+                    if (todayDate >= startDate && todayDate <= endDate) {
+                        statusMessage += `\n📅 假日：${holiday.reason}（${holiday.startDate} 至 ${holiday.endDate}）`;
+                    }
+                }
+
+                for (const leave of dutyState.leaves) {
+                    const startDate = new Date(leave.startDate);
+                    const endDate = new Date(leave.endDate);
+                    const todayDate = new Date(today);
+                    
+                    if (todayDate >= startDate && todayDate <= endDate) {
+                        const currentGroup = bedPairs[dutyState.lastDutyGroup - 1];
+                        if (currentGroup.numbers.includes(leave.person)) {
+                            statusMessage += `\n👤 ${leave.person}号请假：${leave.reason}（${leave.startDate} 至 ${leave.endDate}）`;
+                        }
+                    }
+                }
+            }
+
+            statusElement.innerHTML = statusMessage.replace(/\n/g, '<br>');
+        }
+
+        // 自动加载数据文件
+        function loadDataFileAuto() {
+            fetch('data.txt')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('无法加载数据文件');
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    parseDataFile(data);
+                    console.log('数据文件加载成功');
+                })
+                .catch(error => {
+                    console.log('数据文件加载失败，使用默认数据:', error.message);
+                });
+        }
+
+        // 解析数据文件
+        function parseDataFile(content) {
+            dutyState.leaves = [];
+            dutyState.holidays = [];
+            
+            const lines = content.split('\n');
+            
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                
+                // 跳过空行和注释
+                if (!trimmedLine || trimmedLine.startsWith('#')) {
+                    continue;
+                }
+                
+                const parts = trimmedLine.split(',');
+                
+                if (parts[0] === 'leave' && parts.length >= 4) {
+                    dutyState.leaves.push({
+                        person: parseInt(parts[1]),
+                        startDate: parts[2],
+                        endDate: parts[3],
+                        reason: parts[4] || '无备注'
+                    });
+                }
+                else if (parts[0] === 'holiday' && parts.length >= 3) {
+                    dutyState.holidays.push({
+                        startDate: parts[1],
+                        endDate: parts[2],
+                        reason: parts[3] || '无备注'
+                    });
+                }
+                else if (parts[0] === 'duty' && parts.length >= 3) {
+                    dutyState.lastDutyDate = parts[1];
+                    dutyState.lastDutyGroup = parseInt(parts[2]);
+                }
+            }
+            
+            saveStoredData();
+        }
+
+        // 重置轮值状态
+        function resetDuty() {
+            if (confirm('确定要重置轮值状态吗？这将清除所有存储数据。')) {
+                localStorage.removeItem('dutyState');
+                dutyState = {
+                    lastDutyDate: new Date().toISOString().split('T')[0],
+                    lastDutyGroup: 1,
+                    leaves: [],
+                    holidays: []
+                };
+                saveStoredData();
+                updateDisplay();
+                alert('轮值状态已重置！');
+            }
+        }
+    </script>
+</body>
+</html>
